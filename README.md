@@ -6,5 +6,5 @@
   </samp>
 </p>
 <p align="center">
-  <img src="https://img.shields.io/badge/STATUS-Streamlining%20my%20dev%20setup-blue?labelColor=black&style=for-the-badge&logo=iterm2" alt="STATUS" />
+  <img src="https://img.shields.io/badge/Status-Moving%20to%20NIXOS-5277C3?labelColor=black&style=for-the-badge&logo=nixos&logoColor=5277C3" alt="Status" />
 </p>
