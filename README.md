@@ -6,5 +6,5 @@
   </samp>
 </p>
 <p align="center">
-  <img src="https://img.shields.io/badge/Status-Moving%20to%20NIXOS-5277C3?labelColor=black&style=for-the-badge&logo=nixos&logoColor=5277C3" alt="Status" />
+  <img src="https://img.shields.io/badge/Learning-GO-00ADD8?labelColor=black&style=for-the-badge&logo=go" alt="Learning" />
 </p>
