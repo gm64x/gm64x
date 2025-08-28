@@ -1,0 +1,13 @@
+name , source , installComand 
+go , snap , snap install go --classic
+zig, snap , snap install zig --classic
+rust, snap , snap install rust --classic
+nodejs, snap , snap install node --classic
+python, snap , snap install python --classic
+php, snap , snap install php --classic
+java, snap , snap install openjdk --classic
+dotnet, snap , snap install dotnet-sdk --classic
+git, snap , snap install git --classic
+docker, snap , snap install docker --classic
+mysql, snap , snap install mysql --classic
+postgresql, snap , snap install postgresql --classic

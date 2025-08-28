@@ -1,0 +1,59 @@
+name                          , source , installComand
+blender                       , snap   , snap install blender --classic
+brave                         , snap   , snap install brave
+code                          , snap   , snap install code --classic
+ghostty                       , snap   , snap install ghostty --classic
+kdenlive                      , snap   , snap install kdenlive
+libreoffice                   , snap   , snap install libreoffice
+powershell                    , snap   , snap install powershell --classic
+netbeans                      , snap   , snap install netbeans --classic
+steam                         , snap   , snap install steam
+gitkraken                     , snap   , snap install gitkraken
+Key Rack                      , flathub, flatpak install flathub	app.drey.KeyRack
+Thunderbird                   , flathub, flatpak install flathub org.mozilla.Thunderbird
+Ptyxis                        , flathub, flatpak install flathub app.devsuite.Ptyxis
+Gpg Frontend                  , flathub, flatpak install flathub com.bktus.gpgfrontend
+Discord                       , flathub, flatpak install flathub com.discordapp.Discord
+Eyedropper                    , flathub, flatpak install flathub com.github.finefindus.eyedropper
+Curtail                       , flathub, flatpak install flathub com.github.huluti.Curtail
+Foliate                       , flathub, flatpak install flathub com.github.johnfactotum.Foliate
+Flatseal                      , flathub, flatpak install flathub com.github.tchx84.Flatseal
+Google Chrome                 , flathub, flatpak install flathub com.google.Chrome
+Celeste                       , flathub, flatpak install flathub com.hunterwittenborn.Celeste
+Lock                          , flathub, flatpak install flathub com.konstantintutsch.Lock
+Parsec                        , flathub, flatpak install flathub com.parsecgaming.parsec
+Termius                       , flathub, flatpak install flathub com.termius.Termius
+Bottles                       , flathub, flatpak install flathub com.usebottles.bottles
+Sticky Notes                  , flathub, flatpak install flathub com.vixalien.sticky
+Field Monitor                 , flathub, flatpak install flathub de.capypara.FieldMonitor
+HandBrake                     , flathub, flatpak install flathub fr.handbrake.ghb
+Komikku                       , flathub, flatpak install flathub info.febvre.Komikku
+Celluloid                     , flathub, flatpak install flathub io.github.celluloid_player.Celluloid
+Pins                          , flathub, flatpak install flathub io.github.fabrialberio.pinapp
+Ignition                      , flathub, flatpak install flathub io.github.flattool.Ignition
+Warehouse                     , flathub, flatpak install flathub io.github.flattool.Warehouse
+Varia                         , flathub, flatpak install flathub io.github.giantpinkrobots.varia
+Vaults                        , flathub, flatpak install flathub io.github.mpobaschnig.Vaults
+Errands                       , flathub, flatpak install flathub io.github.mrvladus.List
+Exhibit                       , flathub, flatpak install flathub io.github.nokse22.Exhibit
+Spider                        , flathub, flatpak install flathub io.github.zaedus.spider
+Impression                    , flathub, flatpak install flathub io.gitlab.adhami3310.Impression
+Collector                     , flathub, flatpak install flathub it.mijorus.collector
+Gear Lever                    , flathub, flatpak install flathub it.mijorus.gearlever
+Obsidian                      , flathub, flatpak install flathub md.obsidian.Obsidian
+Lutris                        , flathub, flatpak install flathub net.lutris.Lutris
+GNU Image Manipulation Program, flathub, flatpak install flathub org.gimp.GIMP
+Calendar                      , flathub, flatpak install flathub org.gnome.Calendar
+Audio Player                  , flathub, flatpak install flathub org.gnome.Decibels
+Image Viewer                  , flathub, flatpak install flathub org.gnome.Loupe
+Papers                        , flathub, flatpak install flathub org.gnome.Papers
+Sound Recorder                , flathub, flatpak install flathub org.gnome.SoundRecorder
+Pika Backup                   , flathub, flatpak install flathub org.gnome.World.PikaBackup
+Krita                         , flathub, flatpak install flathub org.kde.krita
+KiCad                         , flathub, flatpak install flathub org.kicad.KiCad
+Parabolic                     , flathub, flatpak install flathub org.nickvision.tubeconverter
+ONLYOFFICE Desktop Editors    , flathub, flatpak install flathub org.onlyoffice.desktopeditors
+Prism Launcher                , flathub, flatpak install flathub org.prismlauncher.PrismLauncher
+Remmina                       , flathub, flatpak install flathub org.remmina.Remmina
+Tenacity                      , flathub, flatpak install flathub org.tenacityaudio.Tenacity
+Tangram                       , flathub, flatpak install flathub re.sonny.Tangram
