@@ -1,0 +1,3 @@
+[submodule "env/Configs/unix/nixos"]
+	path = env/Configs/unix/nixos
+	url = /etc/nixos
