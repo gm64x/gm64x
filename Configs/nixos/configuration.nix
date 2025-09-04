@@ -132,6 +132,8 @@
 	pkgs.dbeaver-bin
 	pkgs.prs
 	pkgs.font-manager
+	pkgs.zed-editor-fhs
+	pkgs.ptyxis
     ];
   };
 
