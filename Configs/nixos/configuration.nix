@@ -5,12 +5,12 @@
 { config, pkgs, ... }:
 
 {
-  imports =
-    [ # Include the results of the hardware scan.
-      ./hardware-configuration.nix
-      ./flatpak.nix
-      ./home-config.nix
-    ];
+  imports = [
+    # Include the results of the hardware scan.
+    ./hardware-configuration.nix
+    ./flatpak.nix
+    ./home-config.nix
+  ];
 
   # Bootloader.
   boot.loader.systemd-boot.enable = true;
@@ -89,69 +89,93 @@
   users.users.griot = {
     isNormalUser = true;
     description = "Gabriel Miguel";
-    extraGroups = [ "networkmanager" "wheel" "docker" ];
+    extraGroups = [
+      "networkmanager"
+      "wheel"
+      "docker"
+    ];
     packages = with pkgs; [
-        pkgs.thunderbird
-	pkgs.vscode-fhs
-	pkgs.ghostty
-	pkgs.toolbox
-    	pkgs.docker
-    	pkgs.docker-client
-    	pkgs.parsec-bin
-    	pkgs.heynote
-	pkgs.typst
-    	pkgs.miktex
-    	pkgs.direnv
-    	pkgs.ente-auth
-    	pkgs.git
-    	pkgs.nano
-    	pkgs.gnupg
-    	pkgs.pass
-	pkgs.uv
-	pkgs.ruff
-	pkgs.ollama
-	pkgs.github-desktop
-	pkgs.obsidian
-	pkgs.vaults
-	pkgs.gocryptfs
-	pkgs.blender
-	pkgs.krita
-	pkgs.obs-studio
-	pkgs.godot
-	pkgs.steam
-	pkgs.gimp3
-	pkgs.refine
-    	pkgs.gnome-extension-manager
-    	pkgs.volta
-    	pkgs.powershell
-#	pkgs.home-manager
-	pkgs.goofcord
-	pkgs.gh
-	pkgs.jdk24
-	pkgs.jdk
-	pkgs.dbeaver-bin
-	pkgs.prs
-	pkgs.font-manager
-	pkgs.zed-editor-fhs
-	pkgs.ptyxis
+      pkgs.thunderbird
+      pkgs.vscode-fhs
+      pkgs.ghostty
+      pkgs.toolbox
+      pkgs.docker
+      pkgs.docker-client
+      pkgs.parsec-bin
+      pkgs.heynote
+      pkgs.typst
+      pkgs.miktex
+      pkgs.direnv
+      pkgs.ente-auth
+      pkgs.git
+      pkgs.nano
+      pkgs.gnupg
+      pkgs.pass
+      pkgs.uv
+      pkgs.ruff
+      pkgs.ollama
+      pkgs.github-desktop
+      pkgs.libGLU
+      pkgs.obsidian
+      pkgs.vaults
+      pkgs.gocryptfs
+      pkgs.blender
+      pkgs.krita
+      pkgs.obs-studio
+      pkgs.godot
+      pkgs.steam
+      pkgs.gimp3
+      pkgs.refine
+      pkgs.gnome-extension-manager
+      pkgs.volta
+      pkgs.gcc
+      pkgs.powershell
+      # pkgs.home-manager
+      pkgs.goofcord
+      pkgs.gh
+      pkgs.jdk24
+      pkgs.jdk
+      pkgs.dbeaver-bin
+      pkgs.prs
+      pkgs.font-manager
+      pkgs.glfw
+      pkgs.zed-editor-fhs
+      pkgs.ptyxis
+      pkgs.xorg.libX11
+      pkgs.google-chrome
+      pkgs.xorg.libXext
+      pkgs.xorg.libXrender
+      pkgs.xorg.libXrandr
+      pkgs.xorg.libXi
+      pkgs.xorg.libXinerama
+      pkgs.xorg.libXcursor
+      pkgs.nixfmt-rfc-style
+      pkgs.zig
+      pkgs.pkg-config
+      pkgs.libGL
     ];
   };
 
+  nix.settings.experimental-features = [
+    "nix-command"
+    "flakes"
+  ];
 
-   programs.steam = {
-       enable = true;
-	  remotePlay.openFirewall = true; 
-	  	# Open ports in the firewall for Steam Remote Play
-	  dedicatedServer.openFirewall = true; 
-	  	# Open ports in the firewall for Source Dedicated Server
-	  localNetworkGameTransfers.openFirewall = true; 
-	  	# Open ports in the firewall for Steam Local Network Game Transfers
+  hardware.opengl.enable = true;
+  programs.steam = {
+    enable = true;
+    remotePlay.openFirewall = true;
+    # Open ports in the firewall for Steam Remote Play
+    dedicatedServer.openFirewall = true;
+    # Open ports in the firewall for Source Dedicated Server
+    localNetworkGameTransfers.openFirewall = true;
+    # Open ports in the firewall for Steam Local Network Game Transfers
   };
   hardware.xone.enable = true; # support for the xbox controller USB dongle
 
   # Install firefox.
   programs.firefox.enable = true;
-  
+
   #Activate tailscale
   #services.tailscale.enable = true;
 
@@ -159,11 +183,11 @@
   #  environment.sessionVariables = {
   #     PATH = "${config.environment.sessionVariables.PATH or ""}:/home/griot/.volta/bin";
   #};
-	
+
   #Docker install preparation:
   virtualisation.docker.rootless = {
-  	enable = true;
-  	setSocketVariable = true;
+    enable = true;
+    setSocketVariable = true;
   };
 
   # Allow unfree packages
@@ -172,8 +196,8 @@
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = with pkgs; [
-  #  vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
-  #  wget
+    #  vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
+    #  wget
   ];
 
   # Some programs need SUID wrappers, can be configured further or are
@@ -203,9 +227,9 @@
   # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
   system.stateVersion = "25.05"; # Did you read the comment?
 
-#  programs.bash.enable = true;
-   environment.sessionVariables = {
-       PATH = "${pkgs.coreutils}/bin:${pkgs.findutils}/bin:/home/griot/.volta/bin";
-   };
+  #  programs.bash.enable = true;
+  environment.sessionVariables = {
+    PATH = "${pkgs.coreutils}/bin:${pkgs.findutils}/bin:/home/griot/.volta/bin";
+  };
 
 }
