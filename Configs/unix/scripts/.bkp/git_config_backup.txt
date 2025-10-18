@@ -1,0 +1,3 @@
+# Git config backup created on Fri Oct 17 09:39:21 PM -03 2025
+user.signingkey=
+commit.gpgsign=false
