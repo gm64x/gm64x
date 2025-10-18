@@ -1,0 +1,1 @@
+cd /home/berzerk/Documents/GitHub/.gmx/.tmp/data && head -1 scoop.csv > temp.csv && tail -n +2 scoop.csv | sort -t, -k3 >> temp.csv && mv temp.csv scoop.csv
