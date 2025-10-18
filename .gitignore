@@ -2,3 +2,7 @@ env/.archive
 env/.archive/*
 desktop.ini
 Configs/ms-win/.bkp/
+Configs/ms-win/.bkp/*
+Configs/unix/scripts/.bkp/
+Configs/unix/scripts/.bkp/*
+
