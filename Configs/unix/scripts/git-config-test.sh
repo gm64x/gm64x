@@ -32,6 +32,27 @@ log_test() {
     echo -e "${CYAN}[TEST MODE]${NC} $1"
 }
 
+# Function to check tools
+check_tools() {
+    log_info "Checking installed tools..."
+    tools=("git" "gpg")
+    installed=()
+    not_installed=()
+    for tool in "${tools[@]}"; do
+        if command -v "$tool" &> /dev/null; then
+            installed+=("$tool")
+        else
+            not_installed+=("$tool")
+        fi
+    done
+    if [ ${#installed[@]} -gt 0 ]; then
+        log_success "Installed tools: ${installed[*]}"
+    fi
+    if [ ${#not_installed[@]} -gt 0 ]; then
+        log_warning "Not installed tools: ${not_installed[*]}"
+    fi
+}
+
 # Check for undo command
 if [ "$1" = "--undo" ]; then
     log_info "Reverting Git configuration..."
@@ -46,6 +67,9 @@ if [ "$1" = "--undo" ]; then
     fi
     exit 0
 fi
+
+# Check tools
+check_tools
 
 # Create backup directory if it doesn't exist
 log_test "Would create backup directory: mkdir -p .bkp"
@@ -227,6 +251,8 @@ elif [ "$choice" -ge 1 ] && [ "$choice" -lt $((index-1)) ]; then
     log_test "Would run: git config --global user.signingkey \"$selected_key\""
     log_test "Would run: git config --global commit.gpgsign true"
     log_success "Git commit signing has been configured (simulated)."
+    log_test "Would display: Copy the following public key and add it to your GitHub account (Settings > SSH and GPG keys > New GPG key):"
+    log_test "Would run: gpg --armor --export \"$selected_key\""
 elif [ "$choice" -eq $((index-1)) ]; then
     # Simulate creating new GPG key
     log_info "Creating a new GPG key..."
@@ -274,6 +300,8 @@ elif [ "$choice" -eq $((index-1)) ]; then
     log_test "Would run: git config --global user.signingkey \"$new_key\""
     log_test "Would run: git config --global commit.gpgsign true"
     log_success "Git commit signing has been configured with the new key (simulated)."
+    log_test "Would display: Copy the following public key and add it to your GitHub account (Settings > SSH and GPG keys > New GPG key):"
+    log_test "Would run: gpg --armor --export \"$new_key\""
 elif [ "$choice" -eq "$index" ]; then
     log_test "Would disable Git commit signing with: git config --global commit.gpgsign false"
     log_success "Git commit signing has been disabled (simulated)."

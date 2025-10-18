@@ -26,6 +26,27 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Function to check tools
+check_tools() {
+    log_info "Checking installed tools..."
+    tools=("git" "gpg")
+    installed=()
+    not_installed=()
+    for tool in "${tools[@]}"; do
+        if command -v "$tool" &> /dev/null; then
+            installed+=("$tool")
+        else
+            not_installed+=("$tool")
+        fi
+    done
+    if [ ${#installed[@]} -gt 0 ]; then
+        log_success "Installed tools: ${installed[*]}"
+    fi
+    if [ ${#not_installed[@]} -gt 0 ]; then
+        log_warning "Not installed tools: ${not_installed[*]}"
+    fi
+}
+
 # Check for undo command
 if [ "$1" = "--undo" ]; then
     log_info "Reverting Git configuration..."
@@ -53,6 +74,9 @@ if [ "$1" = "--undo" ]; then
     fi
     exit 0
 fi
+
+# Check tools
+check_tools
 
 # Create backup directory if it doesn't exist
 mkdir -p .bkp
@@ -244,6 +268,10 @@ elif [ "$choice" -ge 1 ] && [ "$choice" -lt $((index-1)) ]; then
     git config --global user.signingkey "$selected_key"
     git config --global commit.gpgsign true
     log_success "Git commit signing has been configured."
+    echo "Copy the following public key and add it to your GitHub account (Settings > SSH and GPG keys > New GPG key):"
+    echo
+    gpg --armor --export "$selected_key"
+    echo
 elif [ "$choice" -eq $((index-1)) ]; then
     # Create new GPG key
     log_info "Creating a new GPG key..."
@@ -307,6 +335,10 @@ EOF
         git config --global user.signingkey "$new_key"
         git config --global commit.gpgsign true
         log_success "Git commit signing has been configured with the new key."
+        echo "Copy the following public key and add it to your GitHub account (Settings > SSH and GPG keys > New GPG key):"
+        echo
+        gpg --armor --export "$new_key"
+        echo
     else
         log_error "Failed to create GPG key."
         exit 1
