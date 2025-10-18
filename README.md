@@ -11,6 +11,6 @@
 
 </p>
 
-<div align="center" style="font-size: 0.7em; opacity: 0.85; font-family: monospace;">
+<p align="center" style="font-size: 0.7em; opacity: 0.85; font-family: monospace;">
   <span style="color:#3b82f6;">[INFO]</span> This repo doubles as my workspace for <em>dotfiles</em>, custom scripts, and a few clever tweaks.
-</div>
+</p>
