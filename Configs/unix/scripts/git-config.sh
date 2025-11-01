@@ -106,7 +106,7 @@ fi
 # Configure basic Git settings
 log_info "Configuring basic Git settings..."
 
-total_questions=8
+total_questions=9
 current_question=1
 
 # Function to show progress
@@ -156,6 +156,28 @@ elif [ -n "$current_email" ]; then
     log_info "Kept existing user.email: $current_email"
 else
     log_info "Skipped user.email configuration"
+fi
+((current_question++))
+
+# Get default branch name
+show_progress
+current_branch=$(git config --global init.defaultBranch 2>/dev/null || echo '')
+if [ -n "$current_branch" ]; then
+    echo "Current init.defaultBranch: $current_branch"
+    echo "Enter new default branch name (or press Enter to keep current, '/skip' to skip):"
+else
+    echo "Enter default branch name (default: main, or press Enter to use 'main'):"
+fi
+read -r default_branch
+if [ -n "$default_branch" ] && [ "$default_branch" != "/skip" ]; then
+    git config --global init.defaultBranch "$default_branch"
+    log_success "Set default branch name to: $default_branch"
+elif [ -n "$current_branch" ]; then
+    log_info "Kept existing default branch name: $current_branch"
+else
+    # Set to "main" if user skipped or didn't provide input
+    git config --global init.defaultBranch "main"
+    log_success "Set default branch name to: main"
 fi
 ((current_question++))
 
