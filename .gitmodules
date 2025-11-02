@@ -1,3 +1,6 @@
 [submodule "Assets/fonts/SFWindows"]
 	path = Assets/fonts/SFWindows
 	url = https://github.com/bradleyhodges/SFWindows.git
+[submodule "Assets/fonts/adwaita-fonts"]
+	path = Assets/fonts/adwaita-fonts
+	url = https://gitlab.gnome.org/GNOME/adwaita-fonts.git
