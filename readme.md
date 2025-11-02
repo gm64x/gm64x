@@ -10,6 +10,6 @@
    </samp>
 </p>
 <p align="center">
-   <samp align=center><sup>This repo also has doubles as my dotfiles, scripts & tweaks.</sup></samp>
+   <samp align=center><sup>This repo also doubles as my dotfiles, scripts & tweaks.</sup></samp>
 
 </p>
