@@ -32,6 +32,9 @@ out/
 *.bak
 *.tmp
 *.bkp
+*.move
+*.gmm
+*.wip
 
 # Coverage
 coverage/
