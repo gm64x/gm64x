@@ -64,19 +64,48 @@ function Check-Tools {
 function Get-GitConfig {
     param([string]$Key)
     try {
-        $value = git config --global $Key 2>$null
+        # Use & to ensure we call the command
+        # Redirect stderr to null
+        $value = & "git" "config" "--global" $Key 2>$null
+        
+        # git config returns 1 if key is not found, 0 if found.
         if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrEmpty($value)) {
             return $value.Trim()
         }
     }
     catch {
-        # Silently continue
+        # This catch block will handle if 'git' command itself fails to run
     }
-    return ""
+    return "" # Return empty if key not found or any error
 }
 
-# Helper to show progress (emulates the bash script's style)
-$total_questions = 9
+# Helper to set git config with error handling
+function Set-GitConfig {
+    param([string]$Key, [string]$Value)
+    try {
+        if ([string]::IsNullOrEmpty($Value)) {
+            & git config --global --unset "$Key" 2>$null
+            if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 5) { # code 5 is "key not found", which is fine for unset
+                Log-Warning "Failed to unset git config: $Key"
+            }
+        } else {
+            & git config --global "$Key" "$Value"
+            if ($LASTEXITCODE -ne 0) {
+                Log-Error "Failed to set git config $Key to $Value"
+                return $false
+            }
+        }
+        return $true
+    }
+    catch {
+        Log-Error "Failed to set git config $Key : $($_.Exception.Message)"
+        return $false
+    }
+}
+
+
+# Helper to show progress
+$total_questions = 7
 $current_question = 1
 function Show-Progress {
     $progress = [int](($script:current_question * 100) / $script:total_questions)
@@ -84,7 +113,7 @@ function Show-Progress {
     $filled = [int](($progress * $bar_length) / 100)
     $empty = $bar_length - $filled
     $bar = ("#" * $filled) + (" " * $empty)
-    Write-Host "`rProgress: [$bar] $progress% ($script:current_question/$script:total_questions)"
+    Write-Host "`rProgress: [$bar] $progress% ($script:current_question/$script:total_questions)" -NoNewline
 }
 
 #==============================================================================
@@ -101,16 +130,16 @@ if ($Undo) {
         $validKeys = @('user.name', 'user.email', 'user.signingkey', 'commit.gpgsign', 'gpg.format', 'core.editor', 'merge.tool', 'diff.tool')
         
         Get-Content $backupFile | ForEach-Object {
-            if ($_ -match '^([^=]+)=(.*)$') {
-                $key = $matches[1]
-                $value = $matches[2]
+            if ($_ -match '^([^#][^=]+)=(.*)$') {
+                $key = $matches[1].Trim()
+                $value = $matches[2].Trim()
 
                 if ($validKeys -contains $key) {
-                    if ([string]::IsNullOrEmpty($value)) {
-                        git config --global --unset "$key" *>$null
+                    if ([string]::IsNullOrEmpty($value) -or $value -eq '""') {
+                        Set-GitConfig -Key $key -Value ""
                     }
                     else {
-                        git config --global "$key" "$value"
+                        Set-GitConfig -Key $key -Value $value
                     }
                 }
             }
@@ -119,8 +148,8 @@ if ($Undo) {
     }
     else {
         # Default undo behavior if no backup
-        git config --global --unset user.signingkey *>$null
-        git config --global commit.gpgsign false
+        Set-GitConfig -Key "user.signingkey" -Value ""
+        Set-GitConfig -Key "commit.gpgsign" -Value "false"
         Log-Success "Git commit signing has been disabled (no backup file found)."
     }
     exit 0
@@ -139,31 +168,35 @@ if (-not (Test-Path $backupDir)) {
     New-Item -Path $backupDir -ItemType Directory -ErrorAction SilentlyContinue | Out-Null
 }
 
-# Backup current Git config values
+# Fixed Backup Section
 Log-Info "Creating backup of current Git configuration..."
-$date = Get-Date
-"# Git config backup created on $date" | Set-Content $backupFile
-"user.name=$(Get-GitConfig 'user.name')" | Add-Content $backupFile
-"user.email=$(Get-GitConfig 'user.email')" | Add-Content $backupFile
-"user.signingkey=$(Get-GitConfig 'user.signingkey')" | Add-Content $backupFile
+$backupContent = @()
+$backupContent += "# Git config backup created on $(Get-Date)"
+$backupContent += "user.name=$(Get-GitConfig 'user.name')"
+$backupContent += "user.email=$(Get-GitConfig 'user.email')"
+$backupContent += "user.signingkey=$(Get-GitConfig 'user.signingkey')"
 
-# **FIXED LINE**
 $commitSign = Get-GitConfig 'commit.gpgsign'
 if ([string]::IsNullOrEmpty($commitSign)) { $commitSign = 'false' }
-"commit.gpgsign=$commitSign" | Add-Content $backupFile
+$backupContent += "commit.gpgsign=$commitSign"
 
-"gpg.format=$(Get-GitConfig 'gpg.format')" | Add-Content $backupFile
-"core.editor=$(Get-GitConfig 'core.editor')" | Add-Content $backupFile
-"merge.tool=$(Get-GitConfig 'merge.tool')" | Add-Content $backupFile
-"diff.tool=$(Get-GitConfig 'diff.tool')" | Add-Content $backupFile
-Log-Success "Backup created at $backupFile"
+$backupContent += "gpg.format=$(Get-GitConfig 'gpg.format')"
+$backupContent += "core.editor=$(Get-GitConfig 'core.editor')"
+$backupContent += "merge.tool=$(Get-GitConfig 'merge.tool')"
+$backupContent += "diff.tool=$(Get-GitConfig 'diff.tool')"
+
+try {
+    $backupContent | Set-Content $backupFile -ErrorAction Stop
+    Log-Success "Backup created at $backupFile"
+} catch {
+    Log-Error "Failed to create backup: $($_.Exception.Message)"
+}
 
 # Check if required tools are installed
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Log-Error "Git is not installed. Please install Git first."
     exit 1
-}
-else {
+} else {
     Log-Success "Git is installed"
 }
 
@@ -174,15 +207,16 @@ Log-Info "Configuring basic Git settings..."
 Show-Progress
 $current_name = Get-GitConfig 'user.name'
 $prompt = if (-not [string]::IsNullOrEmpty($current_name)) {
-    Write-Host "Current user.name: $current_name"
+    Write-Host "`nCurrent user.name: $current_name"
     "Enter new user.name (or press Enter to keep current, '/skip' to skip):"
 } else {
-    "Enter user.name (or press Enter to skip):"
+    "`nEnter user.name (or press Enter to skip):"
 }
 $user_name = Read-Host $prompt
 if (-not [string]::IsNullOrEmpty($user_name) -and $user_name -ne "/skip") {
-    git config --global user.name "$user_name"
-    Log-Success "Set user.name to: $user_name"
+    if (Set-GitConfig -Key "user.name" -Value $user_name) {
+        Log-Success "Set user.name to: $user_name"
+    }
 } elseif (-not [string]::IsNullOrEmpty($current_name)) {
     Log-Info "Kept existing user.name: $current_name"
 } else {
@@ -194,15 +228,16 @@ $script:current_question++
 Show-Progress
 $current_email = Get-GitConfig 'user.email'
 $prompt = if (-not [string]::IsNullOrEmpty($current_email)) {
-    Write-Host "Current user.email: $current_email"
+    Write-Host "`nCurrent user.email: $current_email"
     "Enter new user.email (or press Enter to keep current, '/skip' to skip):"
 } else {
-    "Enter user.email (or press Enter to skip):"
+    "`nEnter user.email (or press Enter to skip):"
 }
 $user_email = Read-Host $prompt
 if (-not [string]::IsNullOrEmpty($user_email) -and $user_email -ne "/skip") {
-    git config --global user.email "$user_email"
-    Log-Success "Set user.email to: $user_email"
+    if (Set-GitConfig -Key "user.email" -Value $user_email) {
+        Log-Success "Set user.email to: $user_email"
+    }
 } elseif (-not [string]::IsNullOrEmpty($current_email)) {
     Log-Info "Kept existing user.email: $current_email"
 } else {
@@ -214,34 +249,36 @@ $script:current_question++
 Show-Progress
 $current_branch = Get-GitConfig 'init.defaultBranch'
 $prompt = if (-not [string]::IsNullOrEmpty($current_branch)) {
-    Write-Host "Current init.defaultBranch: $current_branch"
+    Write-Host "`nCurrent init.defaultBranch: $current_branch"
     "Enter new default branch name (or press Enter to keep current, '/skip' to skip):"
 } else {
-    "Enter default branch name (default: main, or press Enter to use 'main'):"
+    "`nEnter default branch name (default: main, or press Enter to use 'main'):"
 }
 $default_branch = Read-Host $prompt
 if (-not [string]::IsNullOrEmpty($default_branch) -and $default_branch -ne "/skip") {
-    git config --global init.defaultBranch "$default_branch"
-    Log-Success "Set default branch name to: $default_branch"
+    if (Set-GitConfig -Key "init.defaultBranch" -Value $default_branch) {
+        Log-Success "Set default branch name to: $default_branch"
+    }
 } elseif (-not [string]::IsNullOrEmpty($current_branch)) {
     Log-Info "Kept existing default branch name: $current_branch"
 } else {
-    git config --global init.defaultBranch "main"
-    Log-Success "Set default branch name to: main"
+    if (Set-GitConfig -Key "init.defaultBranch" -Value "main") {
+        Log-Success "Set default branch name to: main"
+    }
 }
 $script:current_question++
 
 # Optional: Configure editor
 Show-Progress
-# **FIXED LINE**
 $current_editor = Get-GitConfig 'core.editor'
 if ([string]::IsNullOrEmpty($current_editor)) { $current_editor = 'none' }
-Write-Host "Configure Git editor (optional):"
+Write-Host "`nConfigure Git editor (optional):"
 Write-Host "Current core.editor: $current_editor"
 $editor = Read-Host "Enter editor command (e.g., nano, vim, 'code --wait') or press Enter to skip:"
 if (-not [string]::IsNullOrEmpty($editor) -and $editor -ne "/skip") {
-    git config --global core.editor "$editor"
-    Log-Success "Set core.editor to: $editor"
+    if (Set-GitConfig -Key "core.editor" -Value $editor) {
+        Log-Success "Set core.editor to: $editor"
+    }
 } else {
     Log-Info "Skipped core.editor configuration"
 }
@@ -249,15 +286,15 @@ $script:current_question++
 
 # Optional: Configure merge tool
 Show-Progress
-# **FIXED LINE**
 $current_merge = Get-GitConfig 'merge.tool'
 if ([string]::IsNullOrEmpty($current_merge)) { $current_merge = 'none' }
-Write-Host "Configure Git merge tool (optional):"
+Write-Host "`nConfigure Git merge tool (optional):"
 Write-Host "Current merge.tool: $current_merge"
 $merge_tool = Read-Host "Enter merge tool (e.g., vimdiff, meld) or press Enter to skip:"
 if (-not [string]::IsNullOrEmpty($merge_tool) -and $merge_tool -ne "/skip") {
-    git config --global merge.tool "$merge_tool"
-    Log-Success "Set merge.tool to: $merge_tool"
+    if (Set-GitConfig -Key "merge.tool" -Value $merge_tool) {
+        Log-Success "Set merge.tool to: $merge_tool"
+    }
 } else {
     Log-Info "Skipped merge.tool configuration"
 }
@@ -265,15 +302,15 @@ $script:current_question++
 
 # Optional: Configure diff tool
 Show-Progress
-# **FIXED LINE**
 $current_diff = Get-GitConfig 'diff.tool'
 if ([string]::IsNullOrEmpty($current_diff)) { $current_diff = 'none' }
-Write-Host "Configure Git diff tool (optional):"
+Write-Host "`nConfigure Git diff tool (optional):"
 Write-Host "Current diff.tool: $current_diff"
 $diff_tool = Read-Host "Enter diff tool (e.g., vimdiff, meld) or press Enter to skip:"
 if (-not [string]::IsNullOrEmpty($diff_tool) -and $diff_tool -ne "/skip") {
-    git config --global diff.tool "$diff_tool"
-    Log-Success "Set diff.tool to: $diff_tool"
+    if (Set-GitConfig -Key "diff.tool" -Value $diff_tool) {
+        Log-Success "Set diff.tool to: $diff_tool"
+    }
 } else {
     Log-Info "Skipped diff.tool configuration"
 }
@@ -281,7 +318,7 @@ $script:current_question++
 
 # --- Ask user to choose between SSH or GPG signing ---
 Show-Progress
-Write-Host "Choose commit signing method:"
+Write-Host "`nChoose commit signing method:"
 Write-Host "1) GPG signing"
 Write-Host "2) SSH signing"
 Write-Host "3) No signing"
@@ -294,16 +331,18 @@ if ([string]::IsNullOrEmpty($signing_choice) -or $signing_choice -eq "/skip" -or
     } else {
         Log-Info "Skipped commit signing configuration."
     }
-    git config --global commit.gpgsign false
-    git config --global --unset gpg.format *>$null
+    Set-GitConfig -Key "commit.gpgsign" -Value "false"
+    Set-GitConfig -Key "gpg.format" -Value ""
+    Set-GitConfig -Key "user.signingkey" -Value ""
+    Write-Host "" # Newline after progress
     Log-Success "Git configuration completed."
     exit 0
 }
 
-# --- SSH Signing Logic ---
+# --- SSH Signing Logic (From Script 2 - Correctly uses private key) ---
 elseif ($signing_choice -eq "2") {
     Log-Info "Configuring SSH signing..."
-    $ssh_dir = "$HOME/.ssh"
+    $ssh_dir = Join-Path $HOME ".ssh"
     if (-not (Test-Path $ssh_dir)) {
         New-Item -Path $ssh_dir -ItemType Directory | Out-Null
     }
@@ -313,15 +352,14 @@ elseif ($signing_choice -eq "2") {
     if (Test-Path $ssh_dir) {
         Get-ChildItem -Path $ssh_dir -Filter "*.pub" | ForEach-Object {
             $private_key_path = $_.FullName.Replace('.pub', '')
-            if (Test-Path $private_key_path -and $_.FullName -ne $private_key_path) {
+            if ((Test-Path $private_key_path) -and ($_.FullName -ne $private_key_path)) {
                 [void]$ssh_keys.Add($_.FullName)
             }
         }
     }
 
     if ($ssh_keys.Count -eq 0) {
-        Show-Progress
-        Log-Warning "No existing SSH keys found"
+        Log-Warning "`nNo existing SSH keys found"
         $generate_ssh_key = Read-Host "Would you like to generate a new SSH key? (y/n, or press Enter to skip)"
         if ($generate_ssh_key -match '^[Yy]$') {
             Log-Info "Generating a new SSH key..."
@@ -332,11 +370,14 @@ elseif ($signing_choice -eq "2") {
             $ssh_filename = Read-Host "Enter filename for SSH key (default: id_ed25519)"
             if ([string]::IsNullOrEmpty($ssh_filename)) { $ssh_filename = 'id_ed25519' }
 
-            ssh-keygen -t ed25519 -C "$ssh_email" -f "$ssh_dir/$ssh_filename"
+            $private_key_path = Join-Path $ssh_dir $ssh_filename
+            $public_key_path = "${private_key_path}.pub"
+
+            # Generate key with no passphrase
+            ssh-keygen -t ed25519 -C "$ssh_email" -f "$private_key_path" -N '""'
             
-            $new_key_path = "$ssh_dir/${ssh_filename}.pub"
-            if (Test-Path $new_key_path) {
-                [void]$ssh_keys.Add($new_key_path)
+            if (Test-Path $public_key_path) {
+                [void]$ssh_keys.Add($public_key_path)
                 Log-Success "SSH key generated successfully"
             } else {
                 Log-Error "Failed to generate SSH key"
@@ -344,20 +385,19 @@ elseif ($signing_choice -eq "2") {
             }
         } else {
             Log-Info "Skipping SSH signing configuration."
-            git config --global commit.gpgsign false
+            Set-GitConfig -Key "commit.gpgsign" -Value "false"
+            Write-Host "" # Newline after progress
             Log-Success "Git configuration completed."
             exit 0
         }
-        $script:current_question++
     }
 
-    Show-Progress
-    Log-Info "Available SSH keys:"
+    Log-Info "`nAvailable SSH keys:"
     $index = 1
     $key_map = @{}
     foreach ($key_file in $ssh_keys) {
-        $key_content = (Get-Content $key_file -ErrorAction SilentlyContinue) | Out-String
         $key_basename = [System.IO.Path]::GetFileName($key_file)
+        $key_content = Get-Content $key_file -ErrorAction SilentlyContinue | Select-Object -First 1
         Write-Host "$index) $key_basename - $key_content"
         $key_map[$index] = $key_file
         $index++
@@ -375,27 +415,27 @@ elseif ($signing_choice -eq "2") {
 
     if ([string]::IsNullOrEmpty($ssh_choice_str) -or $ssh_choice_str -eq "/skip") {
         Log-Info "Skipped SSH signing configuration."
-        git config --global commit.gpgsign false
+        Set-GitConfig -Key "commit.gpgsign" -Value "false"
     } 
     elseif ($key_map.ContainsKey($ssh_choice)) {
-        $selected_ssh_key = $key_map[$ssh_choice]
-        $private_ssh_key = $selected_ssh_key.Replace('.pub', '')
-        $key_basename = [System.IO.Path]::GetFileName($selected_ssh_key)
+        $selected_ssh_key_pub = $key_map[$ssh_choice]
+        $private_ssh_key = $selected_ssh_key_pub.Replace('.pub', '') # Get private key path
+        $key_basename = [System.IO.Path]::GetFileName($selected_ssh_key_pub)
         Log-Info "Configuring Git to sign commits with SSH key: $key_basename"
         
-        git config --global gpg.format ssh
-        git config --global user.signingkey "$selected_ssh_key"
-        git config --global commit.gpgsign true
+        Set-GitConfig -Key "gpg.format" -Value "ssh"
+        Set-GitConfig -Key "user.signingkey" -Value $private_ssh_key # FIXED: Use private key path
+        Set-GitConfig -Key "commit.gpgsign" -Value "true"
         Log-Success "Git commit signing has been configured with SSH."
         
         Write-Host ""
         Log-Info "SSH Key Paths:"
         Write-Host "  Private key: $private_ssh_key"
-        Write-Host "  Public key:  $selected_ssh_key"
+        Write-Host "  Public key:  $selected_ssh_key_pub"
         Write-Host ""
         Write-Host "Copy the following public key and add it to your GitHub account (Settings > SSH and GPG keys > New SSH key > Signing Key):"
         Write-Host ""
-        Get-Content "$selected_ssh_key"
+        Get-Content "$selected_ssh_key_pub"
         Write-Host ""
     } 
     elseif ($ssh_choice -eq $create_new_index) {
@@ -408,26 +448,27 @@ elseif ($signing_choice -eq "2") {
         $ssh_filename = Read-Host "Enter filename for SSH key (default: id_ed25519)"
         if ([string]::IsNullOrEmpty($ssh_filename)) { $ssh_filename = 'id_ed25519' }
 
-        ssh-keygen -t ed25519 -C "$ssh_email" -f "$ssh_dir/$ssh_filename"
+        $private_key_path = Join-Path $ssh_dir $ssh_filename
+        $public_key_path = "${private_key_path}.pub"
+
+        ssh-keygen -t ed25519 -C "$ssh_email" -f "$private_key_path" -N '""'
         
-        $new_key_path = "$ssh_dir/${ssh_filename}.pub"
-        $private_key_path = "$ssh_dir/$ssh_filename"
-        if (Test-Path $new_key_path) {
+        if (Test-Path $public_key_path) {
             Log-Success "SSH key created successfully"
             Log-Info "Configuring Git to sign commits with the new SSH key..."
-            git config --global gpg.format ssh
-            git config --global user.signingkey "$new_key_path"
-            git config --global commit.gpgsign true
+            Set-GitConfig -Key "gpg.format" -Value "ssh"
+            Set-GitConfig -Key "user.signingkey" -Value $private_key_path # FIXED: Use private key path
+            Set-GitConfig -Key "commit.gpgsign" -Value "true"
             Log-Success "Git commit signing has been configured with SSH."
             
             Write-Host ""
             Log-Info "SSH Key Paths:"
             Write-Host "  Private key: $private_key_path"
-            Write-Host "  Public key:  $new_key_path"
+            Write-Host "  Public key:  $public_key_path"
             Write-Host ""
             Write-Host "Copy the following public key and add it to your GitHub account (Settings > SSH and GPG keys > New SSH key > Signing Key):"
             Write-Host ""
-            Get-Content "$new_key_path"
+            Get-Content "$public_key_path"
             Write-Host ""
         } else {
             Log-Error "Failed to create SSH key"
@@ -436,14 +477,15 @@ elseif ($signing_choice -eq "2") {
     } 
     else {
         Log-Info "Cancelled SSH signing configuration."
-        git config --global commit.gpgsign false
+        Set-GitConfig -Key "commit.gpgsign" -Value "false"
     }
 }
 
-# --- GPG Signing Logic ---
+# --- GPG Signing Logic (Secure generation from Script 1) ---
 elseif ($signing_choice -eq "1") {
     if (-not (Get-Command gpg -ErrorAction SilentlyContinue)) {
         Log-Warning "GPG is not installed. Skipping commit signing configuration."
+        Write-Host "" # Newline after progress
         Log-Success "Basic Git configuration completed."
         exit 0
     }
@@ -460,11 +502,10 @@ elseif ($signing_choice -eq "1") {
     }
 
     if ($gpg_keys.Count -eq 0) {
-        Show-Progress
-        Log-Warning "No existing keys found"
+        Log-Warning "`nNo existing keys found"
         $generate_key = Read-Host "Would you like to generate a new GPG key? (y/n, or press Enter to skip)"
         if ($generate_key -match '^[Yy]$') {
-            Log-Info "Generating a new GPG key..."
+            Log-Info "Generating a new GPG key (this will be interactive)..."
             gpg --full-generate-key # Interactive
             
             # Re-check for keys
@@ -481,15 +522,14 @@ elseif ($signing_choice -eq "1") {
             }
         } else {
             Log-Info "Skipping GPG key generation."
-            git config --global commit.gpgsign false
+            Set-GitConfig -Key "commit.gpgsign" -Value "false"
+            Write-Host "" # Newline after progress
             Log-Success "Git commit signing has been disabled."
             exit 0
         }
-        $script:current_question++
     }
 
-    Show-Progress
-    Log-Info "Available GPG keys:"
+    Log-Info "`nAvailable GPG keys:"
     $key_array = [System.Collections.ArrayList]@()
     $index = 1
     $key_map = @{}
@@ -509,7 +549,7 @@ elseif ($signing_choice -eq "1") {
     }
 
     $create_new_index = $index
-    Write-Host "$create_new_index) Create a new GPG key"
+    Write-Host "$create_new_index) Create a new GPG key (non-interactive)"
     $index++
     $cancel_index = $index
     Write-Host "$cancel_index) Do not use GPG signing"
@@ -520,14 +560,15 @@ elseif ($signing_choice -eq "1") {
 
     if ([string]::IsNullOrEmpty($choice_str) -or $choice_str -eq "/skip") {
         Log-Info "Skipped GPG signing configuration."
-        git config --global commit.gpgsign false
+        Set-GitConfig -Key "commit.gpgsign" -Value "false"
         Log-Success "Git commit signing has been disabled."
     } 
     elseif ($key_map.ContainsKey($choice)) {
         $selected_key = $key_map[$choice]
         Log-Info "Configuring Git to sign commits with key: $selected_key"
-        git config --global user.signingkey "$selected_key"
-        git config --global commit.gpgsign true
+        Set-GitConfig -Key "user.signingkey" $selected_key
+        Set-GitConfig -Key "commit.gpgsign" "true"
+        Set-GitConfig -Key "gpg.format" "openpgp" # Explicitly set format
         Log-Success "Git commit signing has been configured."
         Write-Host "Copy the following public key and add it to your GitHub account (Settings > SSH and GPG keys > New GPG key):"
         Write-Host ""
@@ -535,16 +576,17 @@ elseif ($signing_choice -eq "1") {
         Write-Host ""
     } 
     elseif ($choice -eq $create_new_index) {
-        # Create new GPG key (non-interactive)
+        # ---
+        # **SECURE GPG CREATION (From Script 1)**
+        # ---
         Log-Info "Creating a new GPG key..."
-        # **FIXED LINE**
         $git_name = Get-GitConfig 'user.name'
         $git_email = Get-GitConfig 'user.email'
 
         $gpg_name = Read-Host "GPG Key Name (default: $git_name, or '/skip' to skip creation)"
         if ($gpg_name -eq '/skip') { 
             Log-Info "Skipped GPG key creation."
-            git config --global commit.gpgsign false
+            Set-GitConfig -Key "commit.gpgsign" -Value "false"
             Log-Success "Git commit signing has been disabled."
             exit 0
         }
@@ -553,19 +595,29 @@ elseif ($signing_choice -eq "1") {
         $gpg_email = Read-Host "GPG Key Email (default: $git_email, or '/skip' to skip creation)"
         if ($gpg_email -eq '/skip') { 
             Log-Info "Skipped GPG key creation."
-            git config --global commit.gpgsign false
+            Set-GitConfig -Key "commit.gpgsign" -Value "false"
             Log-Success "Git commit signing has been disabled."
             exit 0
         }
         if ([string]::IsNullOrEmpty($gpg_email)) { $gpg_email = $git_email }
         
-        # Note: PowerShell's Read-Host doesn't have a simple -s flag like bash.
-        # This will show the passphrase as it's typed.
-        $gpg_passphrase = Read-Host "GPG Key Passphrase (leave blank for no passphrase):"
+        # Use AsSecureString to securely read the passphrase
+        $secure_passphrase = Read-Host "GPG Key Passphrase (will not be displayed, leave blank for no passphrase):" -AsSecureString
         
         $batch_file = [System.IO.Path]::GetTempFileName()
-        # Using a PowerShell Here-String
-        $batch_content = @"
+        $gen_output = $null
+        $new_key = $null
+        $bstr = [IntPtr]::Zero
+
+        # Use try...finally to ensure the batch file and passphrase in memory are cleared
+        try {
+            # Convert SecureString to BSTR (Windows-specific string)
+            $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure_passphrase)
+            # Convert BSTR to plain text string
+            $gpg_passphrase = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+            
+            # Using a PowerShell Here-String
+            $batch_content = @"
 %echo Generating GPG key...
 Key-Type: RSA
 Key-Length: 4096
@@ -575,43 +627,70 @@ Name-Real: $gpg_name
 Name-Email: $gpg_email
 Expire-Date: 0
 "@
-        if (-not [string]::IsNullOrEmpty($gpg_passphrase)) {
-            $batch_content += "`nPassphrase: $gpg_passphrase"
+            if (-not [string]::IsNullOrEmpty($gpg_passphrase)) {
+                $batch_content += "`nPassphrase: $gpg_passphrase"
+            }
+            $batch_content += "`n%commit`n%echo GPG key generated successfully."
+            
+            Set-Content -Path $batch_file -Value $batch_content
+            
+            # Generate the key and capture output (stdout and stderr)
+            $gen_output = gpg --batch --generate-key "$batch_file" 2>&1
         }
-        $batch_content += "`n%commit`n%echo GPG key generated successfully."
+        finally {
+            # Securely clear the plaintext BSTR from memory
+            if ($bstr -ne [IntPtr]::Zero) {
+                [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+            }
+            # Dispose the SecureString
+            $secure_passphrase.Dispose()
+            
+            # Securely delete the batch file
+            if (Test-Path $batch_file) {
+                Remove-Item $batch_file -Force
+            }
+        }
         
-        Set-Content -Path $batch_file -Value $batch_content
-        
-        # Generate the key
-        gpg --batch --generate-key "$batch_file"
-        Remove-Item $batch_file
-        
-        # Get the new key ID
-        $new_key = $null
-        $(gpg --list-secret-keys --keyid-format LONG 2>$null) | ForEach-Object {
-            if ($_ -match '^sec.*\/([A-F0-9]+)') {
-                $new_key = $matches[1] # This will get the last one
+        # Parse the command output to find the new key ID reliably
+        if ($gen_output) {
+            $gen_output | ForEach-Object {
+                if ($_ -match 'gpg: key ([A-F0-9]+) created') {
+                    $new_key = $matches[1]
+                    break
+                }
+            }
+            # Fallback if 'created' line isn't found
+            if ([string]::IsNullOrEmpty($new_key)) {
+                $gen_output | ForEach-Object {
+                        if ($_ -match 'key ([A-F0-9]+) marked as') {
+                        $new_key = $matches[1]
+                        break
+                    }
+                }
             }
         }
         
         if (-not [string]::IsNullOrEmpty($new_key)) {
             Log-Success "New GPG key created: $new_key"
             Log-Info "Configuring Git to sign commits with the new key..."
-            git config --global user.signingkey "$new_key"
-            git config --global commit.gpgsign true
+            Set-GitConfig -Key "user.signingkey" -Value $new_key
+            Set-GitConfig -Key "commit.gpgsign" -Value "true"
+            Set-GitConfig -Key "gpg.format" -Value "openpgp"
             Log-Success "Git commit signing has been configured with the new key."
-            Write-Host "Copy the following public key and add it to your GitHub account (Settings > SSH and GG keys > New GPG key):"
+            
+            Write-Host "Copy the following public key and add it to your GitHub account (Settings > SSH and GPG keys > New GPG key):"
             Write-Host ""
             gpg --armor --export "$new_key"
             Write-Host ""
         } else {
-            Log-Error "Failed to create GPG key."
+            Log-Error "Failed to create GPG key. Output from GPG:"
+            Write-Host $gen_output
             exit 1
         }
     } 
     elseif ($choice -eq $cancel_index) {
         Log-Info "Disabling Git commit signing."
-        git config --global commit.gpgsign false
+        Set-GitConfig -Key "commit.gpgsign" -Value "false"
         Log-Success "Git commit signing has been disabled."
     } 
     else {
@@ -624,4 +703,5 @@ else {
     exit 1
 }
 
+Write-Host "" # Final newline after progress
 Log-Success "Git configuration completed."
