@@ -41,4 +41,6 @@ coverage/
 # Others
 *.tgz
 *.gz
+Assets/fonts/0xProto
+Assets/fonts/Geist-font
 
