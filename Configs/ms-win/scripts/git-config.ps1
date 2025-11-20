@@ -126,7 +126,9 @@ function Generate-SSHKey-Interactive {
         $private_key_path = Join-Path $SshDir $ssh_filename
         $public_key_path = "${private_key_path}.pub"
 
-        ssh-keygen -t rsa -b 4096 -C "$Email" -f "$private_key_path" -N '""'
+        # REMOVED: -N '""' to allow ssh-keygen to ask for a passphrase interactively
+        Write-Host "You will now be asked to enter a passphrase. Leave empty for no passphrase." -ForegroundColor Cyan
+        ssh-keygen -t rsa -b 4096 -C "$Email" -f "$private_key_path"
     }
     else {
         # Default to Ed25519
@@ -135,7 +137,9 @@ function Generate-SSHKey-Interactive {
         $private_key_path = Join-Path $SshDir $ssh_filename
         $public_key_path = "${private_key_path}.pub"
 
-        ssh-keygen -t ed25519 -C "$Email" -f "$private_key_path" -N '""'
+        # REMOVED: -N '""' to allow ssh-keygen to ask for a passphrase interactively
+        Write-Host "You will now be asked to enter a passphrase. Leave empty for no passphrase." -ForegroundColor Cyan
+        ssh-keygen -t ed25519 -C "$Email" -f "$private_key_path"
     }
 
     return @{
