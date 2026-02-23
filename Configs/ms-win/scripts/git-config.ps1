@@ -148,6 +148,100 @@ function Generate-SSHKey-Interactive {
     }
 }
 
+# Helper to save the current git config state as the new backup
+function Save-Backup {
+    param([string]$BackupFile)
+    $content = @()
+    $content += "# Git config backup created on $(Get-Date)"
+    $content += "user.name=$(Get-GitConfig 'user.name')"
+    $content += "user.email=$(Get-GitConfig 'user.email')"
+    $content += "user.signingkey=$(Get-GitConfig 'user.signingkey')"
+    $cs = Get-GitConfig 'commit.gpgsign'
+    if ([string]::IsNullOrEmpty($cs)) { $cs = 'false' }
+    $content += "commit.gpgsign=$cs"
+    $content += "gpg.format=$(Get-GitConfig 'gpg.format')"
+    $content += "core.editor=$(Get-GitConfig 'core.editor')"
+    $content += "merge.tool=$(Get-GitConfig 'merge.tool')"
+    $content += "diff.tool=$(Get-GitConfig 'diff.tool')"
+    try {
+        $content | Set-Content $BackupFile -ErrorAction Stop
+        Log-Success "Backup updated at $BackupFile"
+    } catch {
+        Log-Error "Failed to update backup: $($_.Exception.Message)"
+    }
+}
+
+
+function Read-BackupConfig {
+    param([string]$BackupFile)
+    $map = @{}
+    if (Test-Path $BackupFile) {
+        Get-Content $BackupFile | ForEach-Object {
+            if ($_ -match '^([^#][^=]+)=(.*)$') {
+                $k = $matches[1].Trim()
+                $v = $matches[2].Trim()
+                $map[$k] = $v
+            }
+        }
+    }
+    return $map
+}
+
+# Helper to resolve a config value using the 3-tier logic:
+#   1. Live config already set  -> skip, return current live value
+#   2. Missing but backup has it -> show backup value, ask to confirm
+#   3. Missing from both         -> prompt user with $DefaultPrompt
+# Returns the final value that should be active (whether changed or not).
+function Resolve-ConfigValue {
+    param(
+        [string]$Key,
+        [hashtable]$Backup,
+        [string]$PromptNew,       # prompt text when no value exists anywhere
+        [string]$FallbackDefault  # hard-coded default (e.g. "main") used only when missing everywhere
+    )
+
+    $live = Get-GitConfig $Key
+
+    # Tier 1: already set in live config -> leave it alone
+    if (-not [string]::IsNullOrEmpty($live)) {
+        Log-Info "Keeping existing $Key`: $live"
+        return $live
+    }
+
+    # Tier 2: missing from live but backup has it
+    if ($Backup.ContainsKey($Key) -and -not [string]::IsNullOrEmpty($Backup[$Key])) {
+        $bval = $Backup[$Key]
+        Write-Host "`n$Key is not set. Backup has: $bval" -ForegroundColor Cyan
+        $confirm = Read-Host "Restore this value? (y/n, or press Enter for yes)"
+        if ([string]::IsNullOrEmpty($confirm) -or $confirm -match '^[Yy]$') {
+            if (Set-GitConfig -Key $Key -Value $bval) {
+                Log-Success "Restored $Key from backup: $bval"
+            }
+            return $bval
+        } else {
+            # User said no -> fall through to prompt
+            Write-Host ""
+        }
+    }
+
+    # Tier 3: prompt user
+    $input = Read-Host $PromptNew
+    if (-not [string]::IsNullOrEmpty($input) -and $input -ne "/skip") {
+        if (Set-GitConfig -Key $Key -Value $input) {
+            Log-Success "Set $Key to: $input"
+        }
+        return $input
+    } elseif (-not [string]::IsNullOrEmpty($FallbackDefault)) {
+        if (Set-GitConfig -Key $Key -Value $FallbackDefault) {
+            Log-Success "Set $Key to default: $FallbackDefault"
+        }
+        return $FallbackDefault
+    }
+
+    Log-Info "Skipped $Key configuration"
+    return ""
+}
+
 # Helper to show progress
 $total_questions = 7
 $current_question = 1
@@ -212,6 +306,9 @@ if (-not (Test-Path $backupDir)) {
     New-Item -Path $backupDir -ItemType Directory -ErrorAction SilentlyContinue | Out-Null
 }
 
+# Load existing backup BEFORE we overwrite it, so we can use it as reference
+$backupMap = Read-BackupConfig -BackupFile $backupFile
+
 # Fixed Backup Section
 Log-Info "Creating backup of current Git configuration..."
 $backupContent = @()
@@ -249,119 +346,83 @@ Log-Info "Configuring basic Git settings..."
 
 # Get user name
 Show-Progress
-$current_name = Get-GitConfig 'user.name'
-$prompt = if (-not [string]::IsNullOrEmpty($current_name)) {
-    Write-Host "`nCurrent user.name: $current_name"
-    "Enter new user.name (or press Enter to keep current, '/skip' to skip):"
-} else {
-    "`nEnter user.name (or press Enter to skip):"
-}
-$user_name = Read-Host $prompt
-if (-not [string]::IsNullOrEmpty($user_name) -and $user_name -ne "/skip") {
-    if (Set-GitConfig -Key "user.name" -Value $user_name) {
-        Log-Success "Set user.name to: $user_name"
-    }
-} elseif (-not [string]::IsNullOrEmpty($current_name)) {
-    Log-Info "Kept existing user.name: $current_name"
-} else {
-    Log-Info "Skipped user.name configuration"
-}
+$user_name = Resolve-ConfigValue -Key 'user.name' -Backup $backupMap `
+    -PromptNew "`nEnter user.name (or press Enter to skip):"
 $script:current_question++
 
 # Get user email
 Show-Progress
-$current_email = Get-GitConfig 'user.email'
-$prompt = if (-not [string]::IsNullOrEmpty($current_email)) {
-    Write-Host "`nCurrent user.email: $current_email"
-    "Enter new user.email (or press Enter to keep current, '/skip' to skip):"
-} else {
-    "`nEnter user.email (or press Enter to skip):"
-}
-$user_email = Read-Host $prompt
-if (-not [string]::IsNullOrEmpty($user_email) -and $user_email -ne "/skip") {
-    if (Set-GitConfig -Key "user.email" -Value $user_email) {
-        Log-Success "Set user.email to: $user_email"
-    }
-} elseif (-not [string]::IsNullOrEmpty($current_email)) {
-    Log-Info "Kept existing user.email: $current_email"
-} else {
-    Log-Info "Skipped user.email configuration"
-}
+$user_email = Resolve-ConfigValue -Key 'user.email' -Backup $backupMap `
+    -PromptNew "`nEnter user.email (or press Enter to skip):"
 $script:current_question++
 
 # Get default branch name
 Show-Progress
-$current_branch = Get-GitConfig 'init.defaultBranch'
-$prompt = if (-not [string]::IsNullOrEmpty($current_branch)) {
-    Write-Host "`nCurrent init.defaultBranch: $current_branch"
-    "Enter new default branch name (or press Enter to keep current, '/skip' to skip):"
-} else {
-    "`nEnter default branch name (default: main, or press Enter to use 'main'):"
-}
-$default_branch = Read-Host $prompt
-if (-not [string]::IsNullOrEmpty($default_branch) -and $default_branch -ne "/skip") {
-    if (Set-GitConfig -Key "init.defaultBranch" -Value $default_branch) {
-        Log-Success "Set default branch name to: $default_branch"
-    }
-} elseif (-not [string]::IsNullOrEmpty($current_branch)) {
-    Log-Info "Kept existing default branch name: $current_branch"
-} else {
-    if (Set-GitConfig -Key "init.defaultBranch" -Value "main") {
-        Log-Success "Set default branch name to: main"
-    }
-}
+Resolve-ConfigValue -Key 'init.defaultBranch' -Backup $backupMap `
+    -PromptNew "`nEnter default branch name (or press Enter to use 'main'):" `
+    -FallbackDefault "main" | Out-Null
 $script:current_question++
 
 # Optional: Configure editor
 Show-Progress
-$current_editor = Get-GitConfig 'core.editor'
-if ([string]::IsNullOrEmpty($current_editor)) { $current_editor = 'none' }
-Write-Host "`nConfigure Git editor (optional):"
-Write-Host "Current core.editor: $current_editor"
-$editor = Read-Host "Enter editor command (e.g., nano, vim, 'code --wait') or press Enter to skip:"
-if (-not [string]::IsNullOrEmpty($editor) -and $editor -ne "/skip") {
-    if (Set-GitConfig -Key "core.editor" -Value $editor) {
-        Log-Success "Set core.editor to: $editor"
-    }
-} else {
-    Log-Info "Skipped core.editor configuration"
-}
+Resolve-ConfigValue -Key 'core.editor' -Backup $backupMap `
+    -PromptNew "`nEnter editor command (e.g., nano, vim, 'code --wait') or press Enter to skip:" | Out-Null
 $script:current_question++
 
 # Optional: Configure merge tool
 Show-Progress
-$current_merge = Get-GitConfig 'merge.tool'
-if ([string]::IsNullOrEmpty($current_merge)) { $current_merge = 'none' }
-Write-Host "`nConfigure Git merge tool (optional):"
-Write-Host "Current merge.tool: $current_merge"
-$merge_tool = Read-Host "Enter merge tool (e.g., vimdiff, meld) or press Enter to skip:"
-if (-not [string]::IsNullOrEmpty($merge_tool) -and $merge_tool -ne "/skip") {
-    if (Set-GitConfig -Key "merge.tool" -Value $merge_tool) {
-        Log-Success "Set merge.tool to: $merge_tool"
-    }
-} else {
-    Log-Info "Skipped merge.tool configuration"
-}
+Resolve-ConfigValue -Key 'merge.tool' -Backup $backupMap `
+    -PromptNew "`nEnter merge tool (e.g., vimdiff, meld) or press Enter to skip:" | Out-Null
 $script:current_question++
 
 # Optional: Configure diff tool
 Show-Progress
-$current_diff = Get-GitConfig 'diff.tool'
-if ([string]::IsNullOrEmpty($current_diff)) { $current_diff = 'none' }
-Write-Host "`nConfigure Git diff tool (optional):"
-Write-Host "Current diff.tool: $current_diff"
-$diff_tool = Read-Host "Enter diff tool (e.g., vimdiff, meld) or press Enter to skip:"
-if (-not [string]::IsNullOrEmpty($diff_tool) -and $diff_tool -ne "/skip") {
-    if (Set-GitConfig -Key "diff.tool" -Value $diff_tool) {
-        Log-Success "Set diff.tool to: $diff_tool"
-    }
-} else {
-    Log-Info "Skipped diff.tool configuration"
-}
+Resolve-ConfigValue -Key 'diff.tool' -Backup $backupMap `
+    -PromptNew "`nEnter diff tool (e.g., vimdiff, meld) or press Enter to skip:" | Out-Null
 $script:current_question++
 
 # --- Ask user to choose between SSH or GPG signing ---
 Show-Progress
+# --- Ask user to choose between SSH or GPG signing ---
+Show-Progress
+
+# Check if signing is already fully configured in live config - skip if so
+$live_signingkey = Get-GitConfig 'user.signingkey'
+$live_gpgsign    = Get-GitConfig 'commit.gpgsign'
+$live_gpgformat  = Get-GitConfig 'gpg.format'
+
+if (-not [string]::IsNullOrEmpty($live_signingkey) -and -not [string]::IsNullOrEmpty($live_gpgsign)) {
+    Log-Info "Commit signing already configured (signingkey: $live_signingkey, gpgsign: $live_gpgsign). Skipping."
+    $script:current_question++
+    Write-Host ""
+    Log-Success "Git configuration completed."
+
+    Save-Backup -BackupFile $backupFile
+    exit 0
+}
+
+# Check if signing config is missing from live but present in backup
+if ([string]::IsNullOrEmpty($live_signingkey) -and $backupMap.ContainsKey('user.signingkey') -and -not [string]::IsNullOrEmpty($backupMap['user.signingkey'])) {
+    Write-Host "`nCommit signing was previously configured." -ForegroundColor Cyan
+    Write-Host "  signingkey : $($backupMap['user.signingkey'])"
+    Write-Host "  gpgsign    : $($backupMap['commit.gpgsign'])"
+    Write-Host "  gpg.format : $($backupMap['gpg.format'])"
+    $restoreSigning = Read-Host "Restore signing config from backup? (y/n, or press Enter for yes)"
+    if ([string]::IsNullOrEmpty($restoreSigning) -or $restoreSigning -match '^[Yy]$') {
+        Set-GitConfig -Key 'user.signingkey' -Value $backupMap['user.signingkey']
+        Set-GitConfig -Key 'commit.gpgsign'  -Value $backupMap['commit.gpgsign']
+        Set-GitConfig -Key 'gpg.format'      -Value $backupMap['gpg.format']
+        Log-Success "Signing configuration restored from backup."
+        $script:current_question++
+        Write-Host ""
+        Log-Success "Git configuration completed."
+
+        Save-Backup -BackupFile $backupFile
+        exit 0
+    }
+    # User declined restore -> fall through to normal signing prompt
+}
+
 Write-Host "`nChoose commit signing method:"
 Write-Host "1) GPG signing"
 Write-Host "2) SSH signing"
@@ -380,6 +441,7 @@ if ([string]::IsNullOrEmpty($signing_choice) -or $signing_choice -eq "/skip" -or
     Set-GitConfig -Key "user.signingkey" -Value ""
     Write-Host "" # Newline after progress
     Log-Success "Git configuration completed."
+    Save-Backup -BackupFile $backupFile
     exit 0
 }
 
@@ -428,6 +490,7 @@ elseif ($signing_choice -eq "2") {
             Set-GitConfig -Key "commit.gpgsign" -Value "false"
             Write-Host "" # Newline after progress
             Log-Success "Git configuration completed."
+            Save-Backup -BackupFile $backupFile
             exit 0
         }
     }
@@ -524,6 +587,7 @@ elseif ($signing_choice -eq "1") {
         Log-Warning "GPG is not installed. Skipping commit signing configuration."
         Write-Host "" # Newline after progress
         Log-Success "Basic Git configuration completed."
+        Save-Backup -BackupFile $backupFile
         exit 0
     }
     Log-Success "GPG is installed"
@@ -562,6 +626,7 @@ elseif ($signing_choice -eq "1") {
             Set-GitConfig -Key "commit.gpgsign" -Value "false"
             Write-Host "" # Newline after progress
             Log-Success "Git commit signing has been disabled."
+            Save-Backup -BackupFile $backupFile
             exit 0
         }
     }
@@ -625,6 +690,7 @@ elseif ($signing_choice -eq "1") {
             Log-Info "Skipped GPG key creation."
             Set-GitConfig -Key "commit.gpgsign" -Value "false"
             Log-Success "Git commit signing has been disabled."
+            Save-Backup -BackupFile $backupFile
             exit 0
         }
         if ([string]::IsNullOrEmpty($gpg_name)) { $gpg_name = $git_name }
@@ -634,6 +700,7 @@ elseif ($signing_choice -eq "1") {
             Log-Info "Skipped GPG key creation."
             Set-GitConfig -Key "commit.gpgsign" -Value "false"
             Log-Success "Git commit signing has been disabled."
+            Save-Backup -BackupFile $backupFile
             exit 0
         }
         if ([string]::IsNullOrEmpty($gpg_email)) { $gpg_email = $git_email }
@@ -741,4 +808,5 @@ else {
 }
 
 Write-Host "" # Final newline after progress
+Save-Backup -BackupFile $backupFile
 Log-Success "Git configuration completed."
