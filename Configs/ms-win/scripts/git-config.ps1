@@ -383,8 +383,7 @@ $script:current_question++
 
 # --- Ask user to choose between SSH or GPG signing ---
 Show-Progress
-# --- Ask user to choose between SSH or GPG signing ---
-Show-Progress
+
 
 # Check if signing is already fully configured in live config - skip if so
 $live_signingkey = Get-GitConfig 'user.signingkey'
@@ -767,7 +766,7 @@ Expire-Date: 0
             if ([string]::IsNullOrEmpty($new_key)) {
                 $gen_output | ForEach-Object {
                         if ($_ -match 'key ([A-F0-9]+) marked as') {
-                        $new_key = $matches[1]
+                    if ($_ -match 'key ([A-F0-9]+) marked as') {
                         break
                     }
                 }

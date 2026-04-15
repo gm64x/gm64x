@@ -44,3 +44,13 @@ coverage/
 Assets/fonts/0xProto
 Assets/fonts/Geist-font
 
+# Working On Files
+*/.gm/*
+*/.wip/*
+.gm/*
+.gm/**
+.gm/
+
+# Secrets
+Configs/.apps/
+Configs/.apps/*

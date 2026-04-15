@@ -469,7 +469,7 @@ elif [ "$signing_choice" = "1" ]; then
             log_info "Skipped GPG key creation."
             git config --global commit.gpgsign false
             log_success "Git commit signing has been disabled."
-            return
+            return 
         fi
         gpg_name=${gpg_name:-$git_name}
         
